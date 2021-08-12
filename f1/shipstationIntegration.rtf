@@ -1,0 +1,239 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2580
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 \
+/*\
+Created By : Shanthaji Jeybert \
+Copyrights : Easifyer\
+Created Date : 20-2-2021\
+Mail : developer@easifyer.com\
+Summary : This function is used to sync shipment data from zoho books to shipstation while shipment is created\
+*/\
+refresh_token = "1000.3224c410decd2fd28d8066339da4badf.f7720e095af03b2f32caaa22d4e372ee";\
+response = null;\
+header_data_for_shipstation = \{"Content-Type":"application/json","Authorization":"Basic MTEyMmUxYzc1YWQxNDMxM2FmMjdkNWQ2MTM0MTJlNmU6YTQ3NWRhMzY0NTFmNGZmNzk4MjU0M2MwMDdlNjNjYjE="\};\
+data = Map();\
+counter_iso_code_map = \{"Australia":"AU","New Zealand":"NZ","U.S.A":"US","United Kingdom":"GB"\};\
+shipment_collection = List();\
+salesorderID = salesorder.get("salesorder_id");\
+access_token_response = invokeurl\
+[\
+	url :"https://accounts.zoho.com/oauth/v2/token?"\
+	type :POST\
+	parameters:\{"refresh_token":refresh_token,"client_id":"1000.WX80656GJGTVUZTJ78UUH213XY4KOS","client_secret":"077770b0f570ec252fb473962144988b135ec7f8f5","redirect_uri":"http://www.zoho.com/inventory","grant_type":"refresh_token"\}\
+];\
+if(access_token_response != null)\
+\{\
+	access_token = access_token_response.get("access_token");\
+	header_map = \{"Authorization":"Zoho-oauthtoken " + access_token,"Content-Type":"application/x-www-form-urlencoded;charset=UTF-8"\};\
+	response = invokeurl\
+	[\
+		url :"https://inventory.zoho.com/api/v1/salesorders/" + salesorder.get("salesorder_id")\
+		type :GET\
+		parameters:\{"organization_id":"670359238"\}\
+		headers:header_map\
+	];\
+	if(response != null)\
+	\{\
+		sales_order = response.get("salesorder");\
+		info salesorder;\
+		if(sales_order != null)\
+		\{\
+			sales_order_number = sales_order.get("salesorder_number");\
+			if(input.sales_order_number != null && input.sales_order_number != "")\
+			\{\
+				data.put("orderNumber",sales_order_number);\
+			\}\
+			else\
+			\{\
+				data.put("orderNumber","No Data");\
+			\}\
+			data.put("orderStatus","awaiting_shipment");\
+			shipping_address = Map();\
+			shipping_address_details = sales_order.get("shipping_address");\
+			if(shipping_address_details != null)\
+			\{\
+				shipping_address.put("name",ifnull(shipping_address_details.get("attention"),""));\
+				shipping_address.put("company",ifnull(sales_order.get("customer_name"),null));\
+				if(shipping_address_details.get("address") != null && shipping_address_details.get("address") != "")\
+				\{\
+					shipping_address.put("street1",shipping_address_details.get("address"));\
+				\}\
+				else\
+				\{\
+					shipping_address.put("street1","no data");\
+				\}\
+				shipping_address.put("street2",ifnull(shipping_address_details.get("street2"),null));\
+				shipping_address.put("street3",null);\
+				shipping_address.put("city",ifnull(shipping_address_details.get("city"),""));\
+				shipping_address.put("state",ifnull(shipping_address_details.get("state"),null));\
+				shipping_address.put("postalCode",ifnull(shipping_address_details.get("zip"),""));\
+				shipping_country = shipping_address_details.get("country");\
+				if(shipping_country != null && shipping_country != "")\
+				\{\
+					if(counter_iso_code_map.containKey(shipping_country))\
+					\{\
+						shipping_address.put("country",counter_iso_code_map.get(shipping_country));\
+					\}\
+					else\
+					\{\
+						shipping_address.put("country","AU");\
+					\}\
+				\}\
+				else\
+				\{\
+					shipping_address.put("country","AU");\
+				\}\
+				shipping_address.put("phone",ifnull(shipping_address_details.get("phone"),null));\
+				shipping_address.put("residential",true);\
+				data.put("shipTo",shipping_address);\
+				data.put("billTo",shipping_address);\
+				if(shipping_address_details.get("fax") != null && matches(shipping_address_details.get("fax"),"^[a-zA-Z0-9.!#$%&'*+/=?^_`\{|\}~-]+@[a-zA-Z0-9-]+(?:\\.[a-zA-Z0-9-]+)*$"))\
+				\{\
+					data.put("customerEmail",shipping_address_details.get("fax"));\
+				\}\
+			\}\
+			else\
+			\{\
+				shipping_address.put("name","");\
+				shipping_address.put("company",ifnull(sales_order.get("customer_name"),null));\
+				shipping_address.put("street1","No Data");\
+				shipping_address.put("street2",null);\
+				shipping_address.put("street3",null);\
+				shipping_address.put("city","");\
+				shipping_address.put("state",null);\
+				shipping_address.put("postalCode","");\
+				shipping_address.put("country","AU");\
+				shipping_address.put("phone",null);\
+				shipping_address.put("residential",true);\
+				data.put("shipTo",shipping_address);\
+				data.put("billTo",shipping_address);\
+			\}\
+			line_item_map = Map();\
+			sales_order_line_items = sales_order.get("line_items");\
+			for each  so_item in sales_order_line_items\
+			\{\
+				line_item_attributes = Map();\
+				line_item_attributes.put("sku",so_item.get("sku"));\
+				line_item_attributes.put("name",so_item.get("name"));\
+				line_item_attributes.put("quantity",so_item.get("quantity").toNumber());\
+				line_item_map.put(so_item.get("item_id"),line_item_attributes);\
+			\}\
+			package_list = sales_order.get("packages");\
+			for each  package in package_list\
+			\{\
+				shipment_collection.add(package.get("shipment_id"));\
+			\}\
+			if(!shipment_collection.isEmpty() && shipment_collection.size() > 0)\
+			\{\
+				shipment_collection_distinct = shipment_collection.distinct();\
+				if(!shipment_collection_distinct.isEmpty() && shipment_collection_distinct.size() > 0)\
+				\{\
+					for each  shipment_id in shipment_collection_distinct\
+					\{\
+						shipment_map = Map();\
+						shipment_response = null;\
+						check_shipstation_order_key = null;\
+						item_array = null;\
+						update_shipment_id_trigger = false;\
+						modify_order_in_shipstation = false;\
+						if(shipment_id != null && shipment_id != "")\
+						\{\
+							shipment_response = invokeurl\
+							[\
+								url :"https://inventory.zoho.com/api/v1/shipmentorders/" + shipment_id\
+								type :GET\
+								parameters:\{"organization_id":"670359238"\}\
+								headers:header_map\
+							];\
+							if(shipment_response != null)\
+							\{\
+								shipment_order = shipment_response.get("shipmentorder");\
+								info "SHIPMENT : " + shipment_order;\
+																if(shipment_order.containKey("carrier") && shipment_order.get("carrier") == "shipstation")\
+																\{\
+																	ship_date = shipment_order.get("date");\
+																	if(ship_date != '')\
+																	\{\
+																		shipment_map.put("orderDate",ship_date);\
+																	\}\
+																	else\
+																	\{\
+																		error = true;\
+																	\}\
+																	shipment_line_items = shipment_order.get("line_items");\
+																	if(shipment_line_items != null)\
+																	\{\
+																		item_array = List();\
+																		for each  line_item in shipment_line_items\
+																		\{\
+																			item_list = Map();\
+																			line_item_id = line_item.get("item_id");\
+																			item_list.put("sku",line_item_map.get(line_item_id).get("sku"));\
+																			item_list.put("name",line_item_map.get(line_item_id).get("name"));\
+																			item_list.put("quantity",line_item_map.get(line_item_id).get("quantity"));\
+																			item_array.add(item_list);\
+																		\}\
+																		if(!item_array.isEmpty())\
+																		\{\
+																			shipment_map.put("items",item_array);\
+																		\}\
+																	\}\
+																	check_shipstation_order_key = invokeurl\
+																	[\
+																		url :"https://www.easifyer.com/armand_books_shipstation_integration/check_shipstation_order_key.php?shipment_id=" + shipment_id\
+																		type :GET\
+																	];\
+																	if(check_shipstation_order_key != null && check_shipstation_order_key.containsKey("orderkey"))\
+																	\{\
+																		if(check_shipstation_order_key.get("orderkey") != null && check_shipstation_order_key.get("orderkey") != "")\
+																		\{\
+																			shipment_map.put("orderkey",check_shipstation_order_key.get("orderkey"));\
+																		\}\
+																		else\
+																		\{\
+																			update_shipment_id_trigger = true;\
+																		\}\
+																	\}\
+																	else\
+																	\{\
+																		update_shipment_id_trigger = true;\
+																	\}\
+																	shipment_map.putAll(data);\
+																	info shipment_map;\
+																	if(update_shipment_id_trigger)\
+																	\{\
+																		modify_order_in_shipstation = invokeurl\
+																		[\
+																			url :"https://ssapi.shipstation.com/orders/createorder"\
+																			type :POST\
+																			parameters:shipment_map.toString()\
+																			headers:header_data_for_shipstation\
+																		];\
+																		if(modify_order_in_shipstation != null)\
+																		\{\
+																			if(modify_order_in_shipstation.get("orderKey") != null && modify_order_in_shipstation.get("orderKey") != "")\
+																			\{\
+																				update_order_id = invokeurl\
+																				[\
+																					url :"https://www.easifyer.com/armand_books_shipstation_integration/update_tracking.php"\
+																					type :POST\
+																					parameters:\{"shipment_id":shipment_id,"order_key":modify_order_in_shipstation.get("orderKey")\}\
+																				];\
+																			\}\
+																		\}\
+																	\}\
+																\}\
+							\}\
+						\}\
+					\}\
+				\}\
+			\}\
+		\}\
+	\}\
+\}\
+}
